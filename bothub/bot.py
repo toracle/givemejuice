@@ -52,24 +52,41 @@ class Bot(BaseBot):
             self.send_menu(event)
         # be aware of tailing space
         elif content.startswith('/show '):
-            self.send_show(content, event)
+            _, name = content.split()
+            self.send_show(name, event)
         # be aware of tailing space
         elif content.startswith('/order_confirm '):
-            self.send_order_confirm(content, event)
+            _, name = content.split()
+            self.send_order_confirm(name, event)
         elif content.startswith('/order '):
-            self.send_order(content, event)
+            _, name = content.split()
+            self.send_order(name, event)
         elif content.startswith('/done '):
             self.send_drink_done(content, event)
         elif content == '/feedback':
             self.send_feedback_request()
+        # in case of natural language
         else:
             data = self.get_user_data()
+            # in case of feedback
             wait_feedback = data.get('wait_feedback')
             if wait_feedback:
                 self.send_feedback(content, event)
+                return
+            # try to recognize the statement
+            recognized = self.recognize(event)
+            if recognized:
+                return
+        self.send_error_message(event)
 
     def send_welcome_message(self, event):
         message = Message(event).set_text('반가워요, GiveMeJuice입니다.\n'\
+                                          '무더운 여름철, 건강하고 시원한 주스 한 잔 어떠세요?')\
+                                .add_quick_reply('메뉴보기')
+        self.send_message(message)
+
+    def send_error_message(self, event):
+        message = Message(event).set_text('잘 못알아들었어요.\n'\
                                           '무더운 여름철, 건강하고 시원한 주스 한 잔 어떠세요?')\
                                 .add_quick_reply('메뉴보기')
         self.send_message(message)
@@ -84,9 +101,8 @@ class Bot(BaseBot):
 
         self.send_message(message)
 
-    def send_show(self, content, event):
+    def send_show(self, name, event):
         menu = self.get_project_data()['menu']
-        _, name = content.split()
         selected_menu = menu[name]
         text = '{name}는 {description}\n가격은 {price}원이예요.'.format(name=name, **selected_menu)
         message = Message(event).set_text(text)\
@@ -95,19 +111,17 @@ class Bot(BaseBot):
 
         self.send_message(message)
 
-    def send_order_confirm(self, content, event):
-        _, name = content.split()
+    def send_order_confirm(self, name, event):
         message = Message(event).set_text('{}를 주문하시겠어요?'.format(name))\
                                 .add_quick_reply('예', '/order {}'.format(name))\
                                 .add_quick_reply('취소', '메뉴보기')
         self.send_message(message)
 
-    def send_order(self, content, event):
-        _, name = content.split()
-        self.send_message('{}를 주문했습니다. 음료가 준비되면 알려드릴께요.'.format(name))
+    def send_order(self, name, event, quantity=1):
+        self.send_message('{}를 {}잔 주문했습니다. 음료가 준비되면 알려드릴께요.'.format(name, quantity))
 
         chat_id = self.get_project_data().get('chat_id')
-        order_message = Message(event).set_text('{} 1잔 주문 들어왔습니다!'.format(name))\
+        order_message = Message(event).set_text('{} {}잔 주문 들어왔습니다!'.format(name, quantity))\
                                       .add_quick_reply('완료', '/done {} {}'.format(event['sender']['id'], name))
 
         self.send_message(order_message, chat_id=chat_id)
@@ -148,3 +162,21 @@ class Bot(BaseBot):
         data = self.get_user_data()
         data['wait_feedback'] = False
         self.set_user_data(data)
+
+    def recognize(self, event):
+        response = self.nlu('apiai').ask(event=event)
+        action = response.action
+        if action.intent != 'input.unknown':
+            if action.completed:
+                if action.intent == 'show-menu':
+                    self.send_menu(event)
+                    return True
+                elif action.intent == 'order-drink':
+                    params = action.parameters
+                    self.send_order(params['menu'], event, quantity=params['quantity'])
+                    return True
+            # if not completed
+            else:
+                self.send_message(response.next_message)
+                return True
+        return False
