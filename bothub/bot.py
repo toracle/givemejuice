@@ -166,17 +166,20 @@ class Bot(BaseBot):
     def recognize(self, event):
         response = self.nlu('apiai').ask(event=event)
         action = response.action
-        if action.intent != 'input.unknown':
-            if action.completed:
-                if action.intent == 'show-menu':
-                    self.send_menu(event)
-                    return True
-                elif action.intent == 'order-drink':
-                    params = action.parameters
-                    self.send_order(params['menu'], event, quantity=params['quantity'])
-                    return True
-            # if not completed
-            else:
-                self.send_message(response.next_message)
-                return True
-        return False
+        if action.intent == 'input.unknown':
+            return False
+
+        if not action.completed:
+            self.send_message(response.next_message)
+            return True
+
+        if action.intent == 'show-menu':
+            self.send_menu(event)
+            return True
+        elif action.intent == 'order-drink':
+            params = action.parameters
+            self.send_order(params['menu'], event, quantity=params['quantity'])
+            return True
+        else:
+            self.send_message(response.next_message)
+            return True
