@@ -77,7 +77,7 @@ class Bot(BaseBot):
             recognized = self.recognize(event)
             if recognized:
                 return
-        self.send_error_message(event)
+            self.send_error_message(event)
 
     def send_welcome_message(self, event):
         message = Message(event).set_text('반가워요, GiveMeJuice입니다.\n'\
