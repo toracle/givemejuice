@@ -9,7 +9,7 @@ from bothub_client.decorators import command
 
 class Bot(BaseBot):
     @command('start')
-    def send_welcome_message(self, event, context):
+    def send_welcome_message(self, event, context, args):
         '''/start 명령이 들어온 경우 안내 메세지를 출력한다.'''
         # 메세지를 생성한다
         message = Message(event).set_text('반가워요, GiveMeJuice입니다.\n'\
@@ -19,7 +19,7 @@ class Bot(BaseBot):
         self.send_message(message)
 
     @command('menu')
-    def send_menu(self, event, context):
+    def send_menu(self, event, context, args):
         '''/menu 명령이 들어왔을 때, 메뉴를 안내한다. 각 메뉴 항목은 postback 버튼으로 구성한다.'''
         # 프로젝트 저장소로부터 메뉴를 불러온다
         menu = self.get_project_data()['menu']
@@ -39,8 +39,11 @@ class Bot(BaseBot):
         self.send_message(message)
 
     @command('show')
-    def send_show(self, event, context, name):
+    def send_show(self, event, context, args):
         '''/show 명령이 이름 인자와 함께 들어왔을 때, 특정 메뉴의 설명과 가격을 안내한다.'''
+        # 인자 목록으로부터 이름을 가져온다
+        name = args[0]
+
         # 프로젝트 저장소로부터 메뉴를 불러온다
         menu = self.get_project_data()['menu']
 
@@ -53,18 +56,21 @@ class Bot(BaseBot):
         # 메세지에 문자열과 버튼을 붙인다
         message = Message(event).set_text(text)\
                                 .add_quick_reply('{} 주문'.format(name), '/order {}'.format(name))\
-                                .add_quick_reply('메뉴보기')
+                                .add_quick_reply('메뉴보기', '/menu')
 
         # 메세지를 보낸다
         self.send_message(message)
 
     @command('order_confirm')
-    def send_order_confirm(self, event, context, name):
+    def send_order_confirm(self, event, context, args):
         '''/order_confirm 명령이 이름 인자와 함께 들어왔을 때, 주문 확인 메세지와 주문 버튼을 안내한다.'''
+        # 인자 목록으로부터 이름을 가져온다
+        name = args[0]
+
         # 주문 확인 메세지와 주문 버튼을 생성한다
         message = Message(event).set_text('{}를 주문하시겠어요?'.format(name))\
                                 .add_quick_reply('예', '/order {}'.format(name))\
-                                .add_quick_reply('취소', '메뉴보기')
+                                .add_quick_reply('취소', '/menu')
 
         # 메세지를 보낸다
         self.send_message(message)
@@ -130,8 +136,13 @@ class Bot(BaseBot):
         self.set_project_data(data)
 
     @command('order')
-    def send_order(self, name, event, quantity=1):
+    def send_order(self, event, context, args):
         '''/order 명령이 이름 인자와 함께 들어왔을 때, 해당 메뉴가 주문되었음을 알리는 메세지를 보내고 단체방에 알린다'''
+        # 인자 목록으로부터 이름을 가져온다
+        name = args[0]
+
+        quantity = args[1] if len(args) > 1 else 1
+
         # 메세지를 고객에게 보낸다
         self.send_message('{}를 {}잔 주문했습니다. 음료가 준비되면 알려드릴께요.'.format(name, quantity))
 
@@ -146,7 +157,7 @@ class Bot(BaseBot):
         self.send_message(order_message, chat_id=chat_id)
 
     @command('done')
-    def send_drink_done(self, event, context):
+    def send_drink_done(self, event, context, args):
         '''/done 명령이 들어왔을 때, 주문이 완료되었음을 고객에게 알린다'''
         # 이벤트로부터 메세지 문자열을 가져온다
         content = event.get('content')
@@ -167,7 +178,7 @@ class Bot(BaseBot):
         self.send_message(message)
 
     @command('feedback')
-    def send_feedback_request(self, event, context):
+    def send_feedback_request(self, event, context, args):
         '''/feedback 명령이 들어왔을 때, 피드백 요청 메세지를 보낸다'''
         # 피드백 요청 메세지를 보낸다
         self.send_message('음료는 맛있게 즐기셨나요? 어떤 경험을 하셨는지 알려주세요. 격려, 꾸지람 모두 큰 도움이 됩니다.')
@@ -180,7 +191,7 @@ class Bot(BaseBot):
         self.send_message('고객의 평가 메세지입니다:\n{}'.format(content), chat_id=chat_id)
 
         message = Message(event).set_text('평가해주셔서 감사합니다!')\
-                                .add_quick_reply('메뉴보기')
+                                .add_quick_reply('메뉴보기', '/menu')
         self.send_message(message)
         data = self.get_user_data()
         data['wait_feedback'] = False
@@ -201,12 +212,12 @@ class Bot(BaseBot):
             return True
 
         if action.intent == 'show-menu':
-            self.send_menu(event, context)
+            self.send_menu(event, context, [])
             return True
 
         if action.intent == 'order-drink':
             params = action.parameters
-            self.send_order(params['menu'], event, quantity=params['quantity'])
+            self.send_order(event, context, (params['menu'], params['quantity']))
             return True
 
         message.set_text(response.next_message)
@@ -216,5 +227,5 @@ class Bot(BaseBot):
     def send_error_message(self, event):
         message = Message(event).set_text('잘 못알아들었어요.\n'\
                                           '무더운 여름철, 건강하고 시원한 주스 한 잔 어떠세요?')\
-                                .add_quick_reply('메뉴보기')
+                                .add_quick_reply('메뉴보기', '/menu')
         self.send_message(message)
